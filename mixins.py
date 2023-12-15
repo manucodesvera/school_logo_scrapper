@@ -83,9 +83,15 @@ class essentials:
         time.sleep(2)
         address = None
         try:
-            address = driver.find_element(
-                By.XPATH, "//div[@data-tooltip='Copy address']"
-            ).text
+            address = driver.find_element(By.XPATH, "//div[@data-tooltip='Copy address']/div[2]/span[2]/span")
+            driver.execute_script("arguments[0].scrollIntoView();", address)
+            time.sleep(2)
+            if address.text == "":
+                address = driver.find_element(By.XPATH, "//div[@data-tooltip='Copy address']//span[@class='DkEaL']")
+                driver.execute_script("arguments[0].scrollIntoView();", address)
+                address = address.text
+            else:
+                address = address.text
         except NoSuchElementException:
             logger.debug(f'ERROR:No address to coppy, FUNCTION:adress_fetcher')
         return address
