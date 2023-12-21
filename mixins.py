@@ -145,7 +145,7 @@ class essentials:
                         logger.debug(
                             f'ERROR: NoSuchElementException Occurred, FUNCTION:scrap_website, KEYWORD:{search_text}')
                     if href_value and "gov" not in str(
-                        href_value.get_attribute("href")
+                            href_value.get_attribute("href")
                     ):
                         wed_data.append(
                             {
@@ -163,7 +163,7 @@ class essentials:
                                 )
             except Exception as e:
                 logger.debug(
-                    f'ERROR: {type(e)}, FUNCTION:scrap_website')
+                    f'ERROR: {type(e)}, FUNCTION:scrap_website, KEYWORD:{search_text}')
 
         return wed_data
 
@@ -291,7 +291,7 @@ class essentials:
             os.makedirs(rootfolder)
 
         if count:
-            new_folder_path = os.path.join(rootfolder, groupfolder.split(":ID:")[0])
+            new_folder_path = os.path.join(rootfolder, groupfolder.split(":ID:")[0].replace(":", ""))
             os.makedirs(new_folder_path, exist_ok=True)
 
         if "https://" not in str(img_data) and "http://" not in str(img_data):
@@ -301,17 +301,25 @@ class essentials:
 
             if response.status_code == 200:
                 if new_folder_path:
+                    new_folder_path = new_folder_path.replace("//", "/")
+                    new_folder_path = new_folder_path.replace(":", "")
+
                     img_path = f"{new_folder_path}/image{count}.jpeg"
+                    img_path = img_path.replace("//", "/")
+                    img_path = img_path.replace(":", "")
                     with open(img_path, "wb") as file:
                         for chunk in response.iter_content(chunk_size=128):
                             file.write(chunk)
                 else:
                     img_path = f"{rootfolder}/{groupfolder.split(':ID:')[1]}.jpeg"
+                    img_path = img_path.replace("//", "/")
+                    img_path = img_path.replace(":", "")
                     with open(img_path, "wb") as file:
                         for chunk in response.iter_content(chunk_size=128):
                             file.write(chunk)
             else:
-                logger.debug(f'ERROR:{response.status_code}, FUNCTION:download_image, SCHOOL:{groupfolder}, LOGO-LINK:{img_data}')
+                logger.debug(
+                    f'ERROR:{response.status_code}, FUNCTION:download_image, SCHOOL:{groupfolder}, LOGO-LINK:{img_data}')
                 return {groupfolder: img_data}
         except Exception as e:
             logger.debug(f'ERROR:{type(e)}, FUNCTION:download_image, SCHOOL:{groupfolder}, LOGO-LINK:{img_data}')
