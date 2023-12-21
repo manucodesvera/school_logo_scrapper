@@ -80,10 +80,10 @@ class essentials:
 
     def adress_fetcher(self, latitude, longitude):
         driver.get(f"https://www.google.com/maps?q={latitude},{longitude}")
-        time.sleep(2)
+        driver.implicitly_wait(10)
         address = None
         try:
-            address = driver.find_element(By.XPATH, "//div[@data-tooltip='Copy address']/div[2]/span[2]/span")
+            address = driver.find_element(By.XPATH, "//div[@data-tooltip='Copy address']//span[@class='DkEaL']")
             driver.execute_script("arguments[0].scrollIntoView();", address)
             time.sleep(2)
             if address.text == "":
@@ -94,6 +94,7 @@ class essentials:
                 address = address.text
         except NoSuchElementException:
             logger.debug(f'ERROR:No address to coppy, FUNCTION:adress_fetcher')
+        print("=================>", address)
         return address
 
     def write_all_address_csv(self, datas):
