@@ -1,3 +1,4 @@
+
 import os
 import time
 
@@ -8,6 +9,7 @@ from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -62,6 +64,7 @@ os.environ["PATH"] += os.pathsep + chromedriver_path
 options = webdriver.ChromeOptions()
 options.add_argument('--disable-gpu')
 options.add_argument('--headless')
+options.add_argument("--incognito")
 options.add_argument(
     "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
 )
@@ -83,18 +86,32 @@ class essentials:
         driver.implicitly_wait(10)
         address = None
         try:
-            address = driver.find_element(By.XPATH, "//div[@data-tooltip='Copy address']//span[@class='DkEaL']")
+            if driver.find_element(By.XPATH, '//*[@id="yDmH0d"]/c-wiz/div/div/div/div[2]/div[1]'):
+                element = driver.find_element(By.XPATH,
+                                          '//*[@id="yDmH0d"]/c-wiz/div/div/div/div[2]/div[1]/div[3]/div[1]/div[1]/form[2]/div/div')
+    
+                actions = ActionChains(driver)
+                actions.move_to_element(element).perform()
+    
+                element.click()
+                driver.implicitly_wait(10)
+        except Exception as e:
+            logger.debug(f'ERROR:No Cookie page, FUNCTION:adress_fetcher')
+
+        driver.implicitly_wait(10)
+        try:
+            address = driver.find_element(By.XPATH, "//div[@data-tooltip='Adresse kopieren']//span[@class='DkEaL']")
             driver.execute_script("arguments[0].scrollIntoView();", address)
             time.sleep(2)
             if address.text == "":
-                address = driver.find_element(By.XPATH, "//div[@data-tooltip='Copy address']//span[@class='DkEaL']")
+                address = driver.find_element(By.XPATH, "//div[@data-tooltip='Adresse kopieren']//span[@class='DkEaL']")
                 driver.execute_script("arguments[0].scrollIntoView();", address)
                 address = address.text
             else:
                 address = address.text
-        except NoSuchElementException:
-            logger.debug(f'ERROR:No address to coppy, FUNCTION:adress_fetcher')
-        print("=================>", address)
+        except NoSuchElementException as e:
+            logger.debug(f'ERROR:No address to copy, FUNCTION:adress_fetcher')
+
         return address
 
     def write_all_address_csv(self, datas):
@@ -120,6 +137,15 @@ class essentials:
             try:
                 driver.get(f"https://in.search.yahoo.com/")
                 driver.implicitly_wait(10)
+                try:
+                    go_to_end = driver.find_element(By.XPATH, '//*[@id="scroll-down-btn"]')
+                    go_to_end.click()
+                    time.sleep(1)
+                    accept_cookie = driver.find_element(By.XPATH, '//*[@id="consent-page"]/div/div/div/form/div[2]/div[2]/button[1]')
+                    accept_cookie.click()
+                except:
+                     logger.debug(f'ERROR:No coookie page in yahoo, FUNCTION:adress_fetcher')
+                driver.implicitly_wait(5)
                 input_box = wait.until(
                     EC.presence_of_element_located((By.ID, "yschsp"))
                 )
