@@ -1,7 +1,8 @@
 
 import os
 import time
-
+import csv
+import shutil
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
@@ -74,14 +75,11 @@ wait = WebDriverWait(driver, 20)
 
 class essentials:
     def delete_previous_files(self):
-        if os.path.exists("address.csv"):
-            os.remove("address.csv")
         if os.path.exists("issue.csv"):
             os.remove("issue.csv")
-        if os.path.exists("webaddress.csv"):
-            os.remove("webaddress.csv")
 
     def adress_fetcher(self, latitude, longitude):
+        print(f"====> Fetching Address of school using latitude:{latitude} and longitude:{longitude}")
         driver.get(f"https://www.google.com/maps?q={latitude},{longitude}")
         driver.implicitly_wait(10)
         address = None
@@ -116,81 +114,92 @@ class essentials:
 
     def write_all_address_csv(self, datas):
         file_path = "address.csv"
-        records = []
-        for school_data in datas:
-            school_name, address = list(school_data.items())[0]
-            records.append([school_name, address])
-        df = pd.DataFrame(records, columns=["School Name", "Address"])
-        df.to_csv(f"{file_path}", index=False)
-        return file_path
+        if os.path.exists(file_path):
+            records = []
+            for school_data in datas:
+                school_name, address = list(school_data.items())[0]
+                records.append([school_name, address])
+            df = pd.DataFrame(records)
+            df.to_csv(f"{file_path}", mode="a", index=False, header=False)
+            return file_path
+        else:
+            records = []
+            for school_data in datas:
+                school_name, address = list(school_data.items())[0]
+                records.append([school_name, address])
+            df = pd.DataFrame(records, columns=["School Name", "Address"])
+            df.to_csv(f"{file_path}", mode="w", index=False)
+            return file_path
 
     def scrap_website(self, address):
         datas = pd.read_csv(address)
         wed_data = []
         for i in range(len(datas)):
-            name = datas.iloc[i]["School Name"].split(":ID:")[0]
-            name = name.replace(".", "").replace("/", " ")
-            search_text = datas.iloc[i]["Address"]
-            if name not in search_text:
-                search_text = str(name) + " " + str(search_text)
-            time.sleep(1)
-            try:
-                driver.get(f"https://in.search.yahoo.com/")
-                driver.implicitly_wait(10)
+            if not self.is_web_address_exist(datas.iloc[i]["School Name"].split(":ID:")[1]):
+                name = datas.iloc[i]["School Name"].split(":ID:")[0]
+                name = name.replace(".", "").replace("/", " ")
+                print(f"====> Fetching Web Address of School : {name}")
+                search_text = datas.iloc[i]["Address"]
+                if name not in search_text:
+                    search_text = str(name) + " " + str(search_text)
+                time.sleep(1)
                 try:
-                    go_to_end = driver.find_element(By.XPATH, '//*[@id="scroll-down-btn"]')
-                    go_to_end.click()
-                    time.sleep(1)
-                    accept_cookie = driver.find_element(By.XPATH, '//*[@id="consent-page"]/div/div/div/form/div[2]/div[2]/button[1]')
-                    accept_cookie.click()
-                except:
-                     logger.debug(f'ERROR:No coookie page in yahoo, FUNCTION:adress_fetcher')
-                driver.implicitly_wait(5)
-                input_box = wait.until(
-                    EC.presence_of_element_located((By.ID, "yschsp"))
-                )
-                input_box.send_keys(search_text)
-                input_box.send_keys(Keys.RETURN)
-                driver.implicitly_wait(10)
-                time.sleep(2)
-                element_xpath = '//*[@id="web"]/ol'
-                ol = None
-                try:
-                    ol = wait.until(
-                        EC.presence_of_element_located((By.XPATH, element_xpath))
-                    )
-                except TimeoutException:
-                    logger.debug(f'ERROR: TimeoutException Occurred, FUNCTION:scrap_website, KEYWORD:{search_text}')
-                if ol:
-                    li_tag = ol.find_element(By.TAG_NAME, "li")
-                    href_value = None
+                    driver.get(f"https://in.search.yahoo.com/")
+                    driver.implicitly_wait(10)
                     try:
-                        href_value = li_tag.find_element(
-                            By.XPATH, "//li/div/div[1]/h3/a"
+                        go_to_end = driver.find_element(By.XPATH, '//*[@id="scroll-down-btn"]')
+                        go_to_end.click()
+                        time.sleep(1)
+                        accept_cookie = driver.find_element(By.XPATH, '//*[@id="consent-page"]/div/div/div/form/div[2]/div[2]/button[1]')
+                        accept_cookie.click()
+                    except:
+                         logger.debug(f'ERROR:No coookie page in yahoo, FUNCTION:adress_fetcher')
+                    driver.implicitly_wait(5)
+                    input_box = wait.until(
+                        EC.presence_of_element_located((By.ID, "yschsp"))
+                    )
+                    input_box.send_keys(search_text)
+                    input_box.send_keys(Keys.RETURN)
+                    driver.implicitly_wait(10)
+                    time.sleep(2)
+                    element_xpath = '//*[@id="web"]/ol'
+                    ol = None
+                    try:
+                        ol = wait.until(
+                            EC.presence_of_element_located((By.XPATH, element_xpath))
                         )
-                    except NoSuchElementException:
-                        logger.debug(
-                            f'ERROR: NoSuchElementException Occurred, FUNCTION:scrap_website, KEYWORD:{search_text}')
-                    if href_value and "gov" not in str(
-                            href_value.get_attribute("href")
-                    ):
-                        wed_data.append(
-                            {
-                                datas.iloc[i]["School Name"]: href_value.get_attribute(
-                                    "href"
-                                )
-                            }
-                        )
-                    else:
-                        href_value = self.alternate_way(search_text)
-                        if href_value:
-                            if "gov" not in str(href_value):
-                                wed_data.append(
-                                    {datas.iloc[i]["School Name"]: href_value}
-                                )
-            except Exception as e:
-                logger.debug(
-                    f'ERROR: {type(e)}, FUNCTION:scrap_website, KEYWORD:{search_text}')
+                    except TimeoutException:
+                        logger.debug(f'ERROR: TimeoutException Occurred, FUNCTION:scrap_website, KEYWORD:{search_text}')
+                    if ol:
+                        li_tag = ol.find_element(By.TAG_NAME, "li")
+                        href_value = None
+                        try:
+                            href_value = li_tag.find_element(
+                                By.XPATH, "//li/div/div[1]/h3/a"
+                            )
+                        except NoSuchElementException:
+                            logger.debug(
+                                f'ERROR: NoSuchElementException Occurred, FUNCTION:scrap_website, KEYWORD:{search_text}')
+                        if href_value and "gov" not in str(
+                                href_value.get_attribute("href")
+                        ):
+                            wed_data.append(
+                                {
+                                    datas.iloc[i]["School Name"]: href_value.get_attribute(
+                                        "href"
+                                    )
+                                }
+                            )
+                        else:
+                            href_value = self.alternate_way(search_text)
+                            if href_value:
+                                if "gov" not in str(href_value):
+                                    wed_data.append(
+                                        {datas.iloc[i]["School Name"]: href_value}
+                                    )
+                except Exception as e:
+                    logger.debug(
+                        f'ERROR: {type(e)}, FUNCTION:scrap_website, KEYWORD:{search_text}')
 
         return wed_data
 
@@ -227,15 +236,25 @@ class essentials:
 
     def write_all_webaddress_csv(self, datas):
         file_path = "webaddress.csv"
-        records = []
-        for web_data in datas:
-            school_name, address = list(web_data.items())[0]
-            records.append([school_name, address])
-        df = pd.DataFrame(records, columns=["School Name", "Web Address"])
-        df.to_csv(f"{file_path}", index=False)
-        return file_path
+        if os.path.exists(file_path):
+            records = []
+            for web_data in datas:
+                school_name, address = list(web_data.items())[0]
+                records.append([school_name, address])
+            df = pd.DataFrame(records)
+            df.to_csv(f"webaddress.csv", mode="a", index=False, header=False)
+            return file_path
+        else:
+            records = []
+            for web_data in datas:
+                school_name, address = list(web_data.items())[0]
+                records.append([school_name, address])
+            df = pd.DataFrame(records, columns=["School Name", "Web Address"])
+            df.to_csv(f"{file_path}", mode="w", index=False)
+            return file_path
 
     def fetch_logo_links(self, school_name, web_address, school_id):
+        print(f"====> Fetching Logo link of School : {school_name}")
         key = str(school_name) + ":ID:" + str(school_id)
         try:
             response = requests.get(web_address)
@@ -318,7 +337,7 @@ class essentials:
             os.makedirs(rootfolder)
 
         if count:
-            new_folder_path = os.path.join(rootfolder, groupfolder.split(":ID:")[0].replace(":", ""))
+            new_folder_path = os.path.join(rootfolder, f'{groupfolder.split(":ID:")[0].replace(":", "")}__{groupfolder.split(":ID:")[1]}')
             os.makedirs(new_folder_path, exist_ok=True)
 
         if "https://" not in str(img_data) and "http://" not in str(img_data):
@@ -337,6 +356,7 @@ class essentials:
                     with open(img_path, "wb") as file:
                         for chunk in response.iter_content(chunk_size=128):
                             file.write(chunk)
+                    print(f"===>Downloading Image in path : {img_path}")
                 else:
                     img_path = f"{rootfolder}/{groupfolder.split(':ID:')[1]}.jpeg"
                     img_path = img_path.replace("//", "/")
@@ -344,6 +364,7 @@ class essentials:
                     with open(img_path, "wb") as file:
                         for chunk in response.iter_content(chunk_size=128):
                             file.write(chunk)
+                    print(f"===>Downloading Image in path : {img_path}")
             else:
                 logger.debug(
                     f'ERROR:{response.status_code}, FUNCTION:download_image, SCHOOL:{groupfolder}, LOGO-LINK:{img_data}')
@@ -351,3 +372,87 @@ class essentials:
         except Exception as e:
             logger.debug(f'ERROR:{type(e)}, FUNCTION:download_image, SCHOOL:{groupfolder}, LOGO-LINK:{img_data}')
 
+    def is_address_exist(self,id):
+        if os.path.exists("address.csv"):
+            with open('address.csv', 'rt') as f:
+                reader = csv.reader(f, delimiter=',')
+                for index, row in enumerate(reader):
+                    if index >= 1:
+                        if str(id).strip() in str(row[0]).split(":ID:")[1]:
+                            return True
+                return False
+        else:
+            return False
+
+    def is_web_address_exist(self,id):
+        if os.path.exists("webaddress.csv"):
+            with open('webaddress.csv', 'rt') as f:
+                reader = csv.reader(f, delimiter=',')
+                for index, row in enumerate(reader):
+                    if index >= 1:
+                        if str(id).strip() in str(row[0]).split(":ID:")[1]:
+                            return True
+                return False
+        else:
+            return False
+
+
+    def delete_old_address(self,excel_file_path, csv_file_path):
+
+        df_csv = pd.read_csv(csv_file_path)
+
+        df_excel = pd.read_excel(excel_file_path)
+
+        column_to_check = 'School Name'
+
+        rows_to_keep = []
+        for index, row in df_csv.iterrows():
+            if row[column_to_check].split(':ID:')[1] in df_excel['Id'].values:
+                rows_to_keep.append(index)
+
+        df_result = df_csv.loc[rows_to_keep]
+
+        df_result.to_csv(csv_file_path, index=False)
+
+    def delete_old_web_address(self,address_file_path, webaddress_file_path):
+
+        df_address = pd.read_csv(address_file_path)
+
+        df_web_address = pd.read_csv(webaddress_file_path)
+
+        csv1 = df_web_address[df_web_address['School Name'].isin(df_address['School Name'])]
+
+        csv1.to_csv(f'{webaddress_file_path}', index=False)
+
+    def is_image_or_directory_exist(self, id_to_check):
+        media_folder_path = 'media'
+        if os.path.exists(media_folder_path):
+            file_path = f"{media_folder_path}/{id_to_check}.jpeg"
+            if os.path.exists(file_path):
+                return True
+
+            for directory_name in os.listdir(media_folder_path):
+                dir_path = f"{media_folder_path}/{directory_name}"
+
+                if os.path.exists(dir_path) and os.path.isdir(dir_path) and directory_name.endswith(id_to_check):
+                    return True
+
+    def read_excel_file(self,file_path):
+        df = pd.read_excel(file_path)
+        return set(df['Id'])
+
+    def delete_old_img_folder(self,media_folder, excel_file):
+        excel_ids = self.read_excel_file(excel_file)
+
+        for root, dirs, files in os.walk(media_folder):
+            for file in files:
+                file_id = os.path.splitext(file)[0]
+                if file_id not in excel_ids:
+                    file_path = os.path.join(root, file)
+                    os.remove(file_path)
+
+            for dir in dirs:
+                dir_id = str(dir).split("__")[-1]
+                if dir_id not in excel_ids:
+                    dir_path = os.path.join(root, dir)
+                    shutil.rmtree(dir_path)
