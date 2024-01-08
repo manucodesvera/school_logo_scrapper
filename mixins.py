@@ -200,7 +200,7 @@ class essentials:
                 except Exception as e:
                     logger.debug(
                         f'ERROR: {type(e)}, FUNCTION:scrap_website, KEYWORD:{search_text}')
-
+        driver.quit()
         return wed_data
 
     def alternate_way(self, search_text):
