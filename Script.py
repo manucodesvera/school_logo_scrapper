@@ -27,7 +27,7 @@ class Scrap(essentials):
 
         """
         print("ADDRESS FETCHING STARTED\n")
-        for i in range(len(datas)):
+        for i in range(5):
            if not self.is_address_exist(str(datas.iloc[i]["Id"]).rstrip()):
                address = self.adress_fetcher(
                    datas.iloc[i]["Latitude"], datas.iloc[i]["Longitude"]

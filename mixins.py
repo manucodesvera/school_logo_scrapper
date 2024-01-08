@@ -13,7 +13,8 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-
+from selenium.common.exceptions import InvalidSessionIdException
+from selenium.common.exceptions import WebDriverException
 from conditions import (
     if_header_img,
     if_image_in_headers_anchor,
@@ -72,45 +73,67 @@ options.add_argument(
 driver = webdriver.Chrome(options=options)
 wait = WebDriverWait(driver, 20)
 
-
 class essentials:
     def delete_previous_files(self):
         if os.path.exists("issue.csv"):
             os.remove("issue.csv")
 
-    def adress_fetcher(self, latitude, longitude):
+    def adress_fetcher(self, latitude, longitude, retry=None):
         print(f"====> Fetching Address of school using latitude:{latitude} and longitude:{longitude}")
-        driver.get(f"https://www.google.com/maps?q={latitude},{longitude}")
-        driver.implicitly_wait(10)
-        address = None
         try:
-            if driver.find_element(By.XPATH, '//*[@id="yDmH0d"]/c-wiz/div/div/div/div[2]/div[1]'):
-                element = driver.find_element(By.XPATH,
-                                          '//*[@id="yDmH0d"]/c-wiz/div/div/div/div[2]/div[1]/div[3]/div[1]/div[1]/form[2]/div/div')
-    
-                actions = ActionChains(driver)
-                actions.move_to_element(element).perform()
-    
-                element.click()
-                driver.implicitly_wait(10)
-        except Exception as e:
-            logger.debug(f'ERROR:No Cookie page, FUNCTION:adress_fetcher')
+            driver.get(f"https://www.google.com/maps?q={latitude},{longitude}")
+            driver.implicitly_wait(10)
+            address = None
+            try:
+                if driver.find_element(By.XPATH, '//*[@id="yDmH0d"]/c-wiz/div/div/div/div[2]/div[1]'):
+                    element = driver.find_element(By.XPATH,
+                                              '//*[@id="yDmH0d"]/c-wiz/div/div/div/div[2]/div[1]/div[3]/div[1]/div[1]/form[2]/div/div')
 
-        driver.implicitly_wait(10)
-        try:
-            address = driver.find_element(By.XPATH, "//div[@data-tooltip='Adresse kopieren']//span[@class='DkEaL']")
-            driver.execute_script("arguments[0].scrollIntoView();", address)
-            time.sleep(2)
-            if address.text == "":
+                    actions = ActionChains(driver)
+                    actions.move_to_element(element).perform()
+
+                    element.click()
+                    driver.implicitly_wait(10)
+            except Exception as e:
+                logger.debug(f'ERROR:No Cookie page, FUNCTION:adress_fetcher')
+
+            driver.implicitly_wait(10)
+            try:
                 address = driver.find_element(By.XPATH, "//div[@data-tooltip='Adresse kopieren']//span[@class='DkEaL']")
                 driver.execute_script("arguments[0].scrollIntoView();", address)
-                address = address.text
-            else:
-                address = address.text
-        except NoSuchElementException as e:
-            logger.debug(f'ERROR:No address to copy, FUNCTION:adress_fetcher')
+                time.sleep(2)
+                if address.text == "":
+                    address = driver.find_element(By.XPATH, "//div[@data-tooltip='Adresse kopieren']//span[@class='DkEaL']")
+                    driver.execute_script("arguments[0].scrollIntoView();", address)
+                    address = address.text
+                else:
+                    address = address.text
+            except NoSuchElementException as e:
+                logger.debug(f'ERROR:No address to copy, FUNCTION:adress_fetcher')
 
-        return address
+            return address
+        except InvalidSessionIdException:
+            if retry:
+                if retry > 1:
+                    logger.debug(f'ERROR:Maximum Retries Exceeded, FUNCTION:adress_fetcher')
+                else:
+                    retry += 1
+                    self.adress_fetcher(latitude, longitude, retry)
+            else:
+                retry = 1
+                self.adress_fetcher(latitude, longitude, retry)
+
+        except WebDriverException:
+            if retry:
+                if retry > 1:
+                    logger.debug(f'ERROR:Maximum Retries Exceeded, FUNCTION:adress_fetcher')
+                else:
+                    retry += 1
+                    self.adress_fetcher(latitude, longitude, retry)
+            else:
+                retry = 1
+                self.adress_fetcher(latitude, longitude, retry)
+
 
     def write_all_address_csv(self, datas):
         file_path = "address.csv"
