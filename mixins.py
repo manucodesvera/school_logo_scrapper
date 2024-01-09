@@ -23,7 +23,6 @@ from conditions import (
     if_images_with_school_name,
 )
 
-import logging
 import logging.config
 import os
 
@@ -60,25 +59,25 @@ LOGGING = {
 logging.config.dictConfig(LOGGING)
 
 logger = logging.getLogger('error_payload')
-
-chromedriver_path = "chromedriver"
-os.environ["PATH"] += os.pathsep + chromedriver_path
-options = webdriver.ChromeOptions()
-options.add_argument('--disable-gpu')
-options.add_argument('--headless')
-options.add_argument("--incognito")
-options.add_argument(
-    "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-)
-driver = webdriver.Chrome(options=options)
-wait = WebDriverWait(driver, 20)
+def start_new_web_driver():
+    chromedriver_path = "chromedriver"
+    os.environ["PATH"] += os.pathsep + chromedriver_path
+    options = webdriver.ChromeOptions()
+    options.add_argument('--disable-gpu')
+    # options.add_argument('--headless')
+    options.add_argument("--incognito")
+    options.add_argument(
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+    )
+    driver = webdriver.Chrome(options=options)
+    return driver
 
 class essentials:
     def delete_previous_files(self):
         if os.path.exists("issue.csv"):
             os.remove("issue.csv")
 
-    def adress_fetcher(self, latitude, longitude, retry=None):
+    def adress_fetcher(self, latitude, longitude, driver, retry=False):
         print(f"====> Fetching Address of school using latitude:{latitude} and longitude:{longitude}")
         try:
             driver.get(f"https://www.google.com/maps?q={latitude},{longitude}")
@@ -110,29 +109,16 @@ class essentials:
                     address = address.text
             except NoSuchElementException as e:
                 logger.debug(f'ERROR:No address to copy, FUNCTION:adress_fetcher')
-
-            return address
+            return {"address": address}
         except InvalidSessionIdException:
-            if retry:
-                if retry > 1:
-                    logger.debug(f'ERROR:Maximum Retries Exceeded, FUNCTION:adress_fetcher')
-                else:
-                    retry += 1
-                    self.adress_fetcher(latitude, longitude, retry)
-            else:
-                retry = 1
-                self.adress_fetcher(latitude, longitude, retry)
+            driver.quit()
+            time.sleep(1)
+            return {"fail": "fail"}
 
         except WebDriverException:
-            if retry:
-                if retry > 1:
-                    logger.debug(f'ERROR:Maximum Retries Exceeded, FUNCTION:adress_fetcher')
-                else:
-                    retry += 1
-                    self.adress_fetcher(latitude, longitude, retry)
-            else:
-                retry = 1
-                self.adress_fetcher(latitude, longitude, retry)
+            driver.quit()
+            time.sleep(1)
+            return {"fail": "fail"}
 
 
     def write_all_address_csv(self, datas):
@@ -154,7 +140,8 @@ class essentials:
             df.to_csv(f"{file_path}", mode="w", index=False)
             return file_path
 
-    def scrap_website(self, address):
+    def scrap_website(self, address, driver):
+        wait = WebDriverWait(driver, 20)
         datas = pd.read_csv(address)
         wed_data = []
         for i in range(len(datas)):
@@ -214,7 +201,7 @@ class essentials:
                                 }
                             )
                         else:
-                            href_value = self.alternate_way(search_text)
+                            href_value = self.alternate_way(search_text,driver, wait)
                             if href_value:
                                 if "gov" not in str(href_value):
                                     wed_data.append(
@@ -226,7 +213,7 @@ class essentials:
         driver.quit()
         return wed_data
 
-    def alternate_way(self, search_text):
+    def alternate_way(self, search_text, driver, wait):
         try:
             driver.get(f"https://www.startpage.com/sp/search")
             input_box = driver.find_element(By.ID, "q")

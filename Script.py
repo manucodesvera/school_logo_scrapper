@@ -4,14 +4,48 @@ import sys
 import time
 import pandas as pd
 
-from mixins import essentials
+from mixins import essentials,start_new_web_driver
+import logging.config
+LOGGING = {
+    'version': 1,
+    'loggers': {
+        'error_payload': {
+            'handlers': ['error_log_handler'],
+            'level': 'DEBUG',
+        }
+    },
+    'handlers': {
+        'error_log_handler': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': "error.log",
+            'when': 'D',
+            'interval': 30,
+            'backupCount': 5,
+            'formatter': 'error_payload',  # Corrected formatter name here
+        }
+    },
+    "formatters": {
+        "error_payload": {
+            "format": (
+                u"%(asctime)s [%(levelname)-8s] "
+                "%(message)s"
+            ),
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+}
+
+logging.config.dictConfig(LOGGING)
+
+logger = logging.getLogger('error_payload')
 
 ROOT_FOLDER = "media"
 is_new_image = False
-
 class Scrap(essentials):
     
     def process_scrap(self, file_path):
+        crash = False
         self.delete_previous_files()
         if os.path.exists('media'):
             self.delete_old_img_folder("media", file_path)
@@ -27,22 +61,40 @@ class Scrap(essentials):
 
         """
         print("ADDRESS FETCHING STARTED\n")
+        driver = start_new_web_driver()
         for i in range(len(datas)):
            if not self.is_address_exist(str(datas.iloc[i]["Id"]).rstrip()):
-               address = self.adress_fetcher(
-                   datas.iloc[i]["Latitude"], datas.iloc[i]["Longitude"]
+               data = self.adress_fetcher(
+                   datas.iloc[i]["Latitude"], datas.iloc[i]["Longitude"], driver
                )
-               if address:
+               if data.get("fail"):
+                   driver = start_new_web_driver()
+                   data = self.adress_fetcher(
+                       datas.iloc[i]["Latitude"], datas.iloc[i]["Longitude"], driver, retry=True
+                   )
+                   if data.get("address"):
+                       new_df.append(
+                           {datas.iloc[i]["FullName"] + ":ID:" + datas.iloc[i]["Id"]: data["address"]}
+                       )
+                   elif data.get("fail"):
+                       crash = True
+                       logger.debug(f'ERROR:Driver Failure, FUNCTION:adress_fetcher, MESSAGE: Driver Crashed on fetching {i} address')
+                       break
+
+               elif data.get("address"):
                    new_df.append(
-                       {datas.iloc[i]["FullName"] + ":ID:" + datas.iloc[i]["Id"]: address}
+                       {datas.iloc[i]["FullName"] + ":ID:" + datas.iloc[i]["Id"]: data["address"]}
                    )
         if new_df:
             self.write_all_address_csv(new_df)
+        if crash == True:
+            driver = start_new_web_driver()
         print("ADDRESS FETCHING COMPLETED\n")
         if os.path.exists("webaddress.csv"):
             self.delete_old_web_address("address.csv", "webaddress.csv")
         print("WEB ADDRESS FETCHING STARTED\n")
-        web_address = self.scrap_website("address.csv")
+        web_address = self.scrap_website("address.csv", driver)
+        driver.quit()
         web_address_csv = self.write_all_webaddress_csv(web_address)
         print("WEB ADDRESS FETCHING COMPLETED\n")
         web_address = pd.read_csv(web_address_csv)
