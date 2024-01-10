@@ -70,16 +70,26 @@ class Scrap(essentials):
                if data.get("fail"):
                    driver = start_new_web_driver()
                    data = self.adress_fetcher(
-                       datas.iloc[i]["Latitude"], datas.iloc[i]["Longitude"], driver, retry=True
+                       datas.iloc[i]["Latitude"], datas.iloc[i]["Longitude"], driver
                    )
                    if data.get("address"):
                        new_df.append(
                            {datas.iloc[i]["FullName"] + ":ID:" + datas.iloc[i]["Id"]: data["address"]}
                        )
                    elif data.get("fail"):
-                       crash = True
-                       logger.debug(f'ERROR:Driver Failure, FUNCTION:adress_fetcher, MESSAGE: Driver Crashed on fetching {i} address')
-                       break
+                       driver = start_new_web_driver()
+                       data = self.adress_fetcher(
+                           datas.iloc[i]["Latitude"], datas.iloc[i]["Longitude"], driver
+                       )
+                       if data.get("address"):
+                           new_df.append(
+                               {datas.iloc[i]["FullName"] + ":ID:" + datas.iloc[i]["Id"]: data["address"]}
+                           )
+                       elif data.get("fail"):
+                           crash = True
+                           logger.debug(
+                               f'ERROR:Driver Failure, FUNCTION:adress_fetcher, MESSAGE: Driver Crashed on fetching {i} address')
+                           break
 
                elif data.get("address"):
                    new_df.append(

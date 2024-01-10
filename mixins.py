@@ -77,7 +77,7 @@ class essentials:
         if os.path.exists("issue.csv"):
             os.remove("issue.csv")
 
-    def adress_fetcher(self, latitude, longitude, driver, retry=False):
+    def adress_fetcher(self, latitude, longitude, driver):
         print(f"====> Fetching Address of school using latitude:{latitude} and longitude:{longitude}")
         try:
             driver.get(f"https://www.google.com/maps?q={latitude},{longitude}")
@@ -111,11 +111,15 @@ class essentials:
                 logger.debug(f'ERROR:No address to copy, FUNCTION:adress_fetcher')
             return {"address": address}
         except InvalidSessionIdException:
+            logger.debug(
+                f'ERROR:InvalidSessionIdException, FUNCTION:adress_fetcher, MESSAGE: Retrying to  fetch ddress of latitude:{latitude}, longitude:{longitude}')
             driver.quit()
             time.sleep(1)
             return {"fail": "fail"}
 
         except WebDriverException:
+            logger.debug(
+                f'ERROR:WebDriverException, FUNCTION:adress_fetcher, MESSAGE: Retrying to  fetch ddress of latitude:{latitude}, longitude:{longitude}')
             driver.quit()
             time.sleep(1)
             return {"fail": "fail"}
@@ -140,76 +144,103 @@ class essentials:
             df.to_csv(f"{file_path}", mode="w", index=False)
             return file_path
 
-    def scrap_website(self, address, driver):
+    def fetch_webaddress(self, datas, driver, i):
         wait = WebDriverWait(driver, 20)
+        if not self.is_web_address_exist(datas.iloc[i]["School Name"].split(":ID:")[1]):
+            name = datas.iloc[i]["School Name"].split(":ID:")[0]
+            name = name.replace(".", "").replace("/", " ")
+            print(f"====> Fetching Web Address of School : {name}")
+            search_text = datas.iloc[i]["Address"]
+            if name not in search_text:
+                search_text = str(name) + " " + str(search_text)
+            time.sleep(1)
+            try:
+                driver.get(f"https://in.search.yahoo.com/")
+                driver.implicitly_wait(10)
+                try:
+                    go_to_end = driver.find_element(By.XPATH, '//*[@id="scroll-down-btn"]')
+                    go_to_end.click()
+                    time.sleep(1)
+                    accept_cookie = driver.find_element(By.XPATH,
+                                                        '//*[@id="consent-page"]/div/div/div/form/div[2]/div[2]/button[1]')
+                    accept_cookie.click()
+                except:
+                    logger.debug(f'ERROR:No coookie page in yahoo, FUNCTION:adress_fetcher')
+                driver.implicitly_wait(5)
+                input_box = wait.until(
+                    EC.presence_of_element_located((By.ID, "yschsp"))
+                )
+                input_box.send_keys(search_text)
+                input_box.send_keys(Keys.RETURN)
+                driver.implicitly_wait(10)
+                time.sleep(2)
+                element_xpath = '//*[@id="web"]/ol'
+                ol = None
+                try:
+                    ol = wait.until(
+                        EC.presence_of_element_located((By.XPATH, element_xpath))
+                    )
+                except TimeoutException:
+                    logger.debug(f'ERROR: TimeoutException Occurred, FUNCTION:scrap_website, KEYWORD:{search_text}')
+                if ol:
+                    li_tag = ol.find_element(By.TAG_NAME, "li")
+                    href_value = None
+                    try:
+                        href_value = li_tag.find_element(
+                            By.XPATH, "//li/div/div[1]/h3/a"
+                        )
+                    except NoSuchElementException:
+                        logger.debug(
+                            f'ERROR: NoSuchElementException Occurred, FUNCTION:scrap_website, KEYWORD:{search_text}')
+                    if href_value and "gov" not in str(
+                            href_value.get_attribute("href")
+                    ):
+                        href = {datas.iloc[i]["School Name"]: href_value.get_attribute(
+                            "href"
+                        )}
+                        return href
+                    else:
+                        href_value = self.alternate_way(search_text, driver, wait)
+                        if href_value:
+                            if "gov" not in str(href_value):
+                                href = {datas.iloc[i]["School Name"]: href_value}
+                                return href
+            except InvalidSessionIdException:
+                logger.debug(f'ERROR:InvalidSessionIdException, FUNCTION:scrap_website, MESSAGE: Retrying to  fetch webaddress of {datas.iloc[i]["School Name"].split(":ID:")[0]}')
+                driver.quit()
+                return "Crashed"
+            except WebDriverException:
+                logger.debug(
+                    f'ERROR:WebDriverException, FUNCTION:scrap_website, MESSAGE: Retrying to  fetch webaddress of {datas.iloc[i]["School Name"].split(":ID:")[0]}')
+                driver.quit()
+                return "Crashed"
+            except Exception as e:
+                logger.debug(
+                    f'ERROR: {type(e)}, FUNCTION:scrap_website, KEYWORD:{search_text}')
+
+    def scrap_website(self, address, driver):
         datas = pd.read_csv(address)
         wed_data = []
         for i in range(len(datas)):
-            if not self.is_web_address_exist(datas.iloc[i]["School Name"].split(":ID:")[1]):
-                name = datas.iloc[i]["School Name"].split(":ID:")[0]
-                name = name.replace(".", "").replace("/", " ")
-                print(f"====> Fetching Web Address of School : {name}")
-                search_text = datas.iloc[i]["Address"]
-                if name not in search_text:
-                    search_text = str(name) + " " + str(search_text)
+            data = self.fetch_webaddress(datas, driver,  i)
+            if data == "Crashed":
                 time.sleep(1)
-                try:
-                    driver.get(f"https://in.search.yahoo.com/")
-                    driver.implicitly_wait(10)
-                    try:
-                        go_to_end = driver.find_element(By.XPATH, '//*[@id="scroll-down-btn"]')
-                        go_to_end.click()
-                        time.sleep(1)
-                        accept_cookie = driver.find_element(By.XPATH, '//*[@id="consent-page"]/div/div/div/form/div[2]/div[2]/button[1]')
-                        accept_cookie.click()
-                    except:
-                         logger.debug(f'ERROR:No coookie page in yahoo, FUNCTION:adress_fetcher')
-                    driver.implicitly_wait(5)
-                    input_box = wait.until(
-                        EC.presence_of_element_located((By.ID, "yschsp"))
-                    )
-                    input_box.send_keys(search_text)
-                    input_box.send_keys(Keys.RETURN)
-                    driver.implicitly_wait(10)
-                    time.sleep(2)
-                    element_xpath = '//*[@id="web"]/ol'
-                    ol = None
-                    try:
-                        ol = wait.until(
-                            EC.presence_of_element_located((By.XPATH, element_xpath))
-                        )
-                    except TimeoutException:
-                        logger.debug(f'ERROR: TimeoutException Occurred, FUNCTION:scrap_website, KEYWORD:{search_text}')
-                    if ol:
-                        li_tag = ol.find_element(By.TAG_NAME, "li")
-                        href_value = None
-                        try:
-                            href_value = li_tag.find_element(
-                                By.XPATH, "//li/div/div[1]/h3/a"
-                            )
-                        except NoSuchElementException:
-                            logger.debug(
-                                f'ERROR: NoSuchElementException Occurred, FUNCTION:scrap_website, KEYWORD:{search_text}')
-                        if href_value and "gov" not in str(
-                                href_value.get_attribute("href")
-                        ):
-                            wed_data.append(
-                                {
-                                    datas.iloc[i]["School Name"]: href_value.get_attribute(
-                                        "href"
-                                    )
-                                }
-                            )
-                        else:
-                            href_value = self.alternate_way(search_text,driver, wait)
-                            if href_value:
-                                if "gov" not in str(href_value):
-                                    wed_data.append(
-                                        {datas.iloc[i]["School Name"]: href_value}
-                                    )
-                except Exception as e:
-                    logger.debug(
-                        f'ERROR: {type(e)}, FUNCTION:scrap_website, KEYWORD:{search_text}')
+                driver = start_new_web_driver()
+                data = self.fetch_webaddress(datas, driver, i)
+                if data == "Crashed":
+                    time.sleep(1)
+                    driver = start_new_web_driver()
+                    data = self.fetch_webaddress(datas, driver, i)
+                    if data == "Crashed":
+                        logger.debug(f'ERROR:Driver Failure, FUNCTION:scrap_website, MESSAGE: Driver Crashed on fetching webaddress of {datas.iloc[i]["School Name"].split(":ID:")[0]}')
+                        break
+                    elif data:
+                        wed_data.append(data)
+                elif data:
+                    wed_data.append(data)
+            elif data:
+                wed_data.append(data)
+
         driver.quit()
         return wed_data
 
